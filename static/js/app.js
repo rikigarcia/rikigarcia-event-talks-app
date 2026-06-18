@@ -16,6 +16,9 @@ const elements = {
     cacheStatusContainer: document.getElementById('cache-status-container'),
     cacheBadge: document.getElementById('cache-badge'),
     lastUpdatedText: document.getElementById('last-updated-text'),
+    offlineBanner: document.getElementById('offline-banner'),
+    offlineBannerText: document.getElementById('offline-banner-text'),
+    backToTop: document.getElementById('back-to-top'),
     
     // Modal
     tweetModal: document.getElementById('tweet-modal'),
@@ -119,6 +122,20 @@ function setupEventListeners() {
             hideTweetModal();
         }
     });
+
+    // Back to Top button click handler
+    elements.backToTop.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // Scroll listener for showing/hiding Back to Top button
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 300) {
+            elements.backToTop.classList.remove('hidden');
+        } else {
+            elements.backToTop.classList.add('hidden');
+        }
+    });
 }
 
 // Fetch Releases from Flask API
@@ -154,6 +171,9 @@ async function fetchReleases(forceRefresh = false) {
         console.error('Failed to fetch release notes:', error);
         showToast('Error: Failed to fetch release notes.');
         
+        elements.offlineBannerText.textContent = 'Server connection error. Unable to connect to the Flask backend.';
+        elements.offlineBanner.classList.remove('hidden');
+        
         // If we have cached data locally, show it. Otherwise show no results
         if (releasesStore.length === 0) {
             elements.noResults.classList.remove('hidden');
@@ -171,24 +191,33 @@ async function fetchReleases(forceRefresh = false) {
 
 // Update App Header Status (Badge & Time)
 function updateMetaInfo(source, timestamp) {
-    // Update Source Badge (Live vs Cached)
+    const date = new Date(timestamp * 1000);
+    const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateString = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    elements.lastUpdatedText.textContent = `Updated: ${dateString} at ${timeString}`;
+
+    // Update Source Badge (Live vs Cached) & Show Warning Banner if offline
     if (source === 'live') {
         elements.cacheBadge.textContent = 'Live';
         elements.cacheBadge.className = 'badge badge-cache';
         elements.cacheBadge.style.background = 'var(--badge-feature-bg)';
         elements.cacheBadge.style.color = 'var(--badge-feature-text)';
+        elements.offlineBanner.classList.add('hidden');
+    } else if (source === 'stale_cache') {
+        elements.cacheBadge.textContent = 'Stale Cache';
+        elements.cacheBadge.className = 'badge badge-cache warning';
+        elements.cacheBadge.style.background = 'var(--badge-deprecation-bg)';
+        elements.cacheBadge.style.color = 'var(--badge-deprecation-text)';
+        
+        elements.offlineBannerText.textContent = `Offline Mode: Connection failed. Displaying cached notes from ${dateString} at ${timeString}.`;
+        elements.offlineBanner.classList.remove('hidden');
     } else {
         elements.cacheBadge.textContent = 'Cached';
         elements.cacheBadge.className = 'badge badge-cache';
         elements.cacheBadge.style.background = 'var(--color-primary-glass)';
         elements.cacheBadge.style.color = 'var(--color-primary)';
+        elements.offlineBanner.classList.add('hidden');
     }
-
-    // Format Timestamp
-    const date = new Date(timestamp * 1000);
-    const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateString = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    elements.lastUpdatedText.textContent = `Updated: ${dateString} at ${timeString}`;
 }
 
 // Filter and Render Feed Cards
@@ -229,10 +258,13 @@ function renderFeed() {
         const groupCard = document.createElement('div');
         groupCard.className = 'release-group-card';
         
-        // Header
+        // Header (with relative date badge)
+        const relativeLabel = getRelativeDateLabel(release.date);
+        const displayDate = `${release.date}${relativeLabel}`;
+        
         const headerHTML = `
             <div class="group-header">
-                <h2 class="group-date">${release.date}</h2>
+                <h2 class="group-date">${displayDate}</h2>
                 <a href="${release.link}" target="_blank" class="group-link" rel="noopener noreferrer">
                     Official Notes
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -245,14 +277,22 @@ function renderFeed() {
         // Updates List
         let updatesHTML = '<div class="group-updates">';
         filteredUpdates.forEach((update, idx) => {
-            // We use standard HTML content provided by feed, safely styled via CSS
+            // Category Icon
+            const iconSvg = getBadgeIcon(update.category);
+            
+            // Highlight search query
+            const highlightedHtml = highlightHTML(update.html, searchQuery);
+            
             updatesHTML += `
                 <article class="update-item" data-id="${release.id}-${idx}">
                     <div class="update-header">
-                        <span class="update-type-badge ${update.category}">${update.type}</span>
+                        <span class="update-type-badge ${update.category}">
+                            ${iconSvg}
+                            ${update.type}
+                        </span>
                     </div>
                     <div class="update-body">
-                        ${update.html}
+                        ${highlightedHtml}
                     </div>
                     <div class="update-actions">
                         <button class="btn btn-copy-action" title="Copy release note text to clipboard">
@@ -523,4 +563,92 @@ function escapeCSVField(val) {
         strVal = '"' + strVal + '"';
     }
     return strVal;
+}
+
+// Get SVG icons dynamically based on category
+function getBadgeIcon(category) {
+    const icons = {
+        feature: `<span class="badge-icon"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 22h20L12 2z"></path></svg></span>`,
+        changed: `<span class="badge-icon"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8.1 8.1 0 0 0-15.5-2m-.5-5v5h5M4 13a8.1 8.1 0 0 0 15.5 2m.5 5v-5h-5"></path></svg></span>`,
+        issue: `<span class="badge-icon"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></span>`,
+        deprecation: `<span class="badge-icon"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>`,
+        announcement: `<span class="badge-icon"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></span>`,
+        info: `<span class="badge-icon"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="9" x2="12.01" y2="9"></line></svg></span>`
+    };
+    return icons[category] || icons.info;
+}
+
+// Get relative date suffix label (e.g. June 17, 2026 -> (Yesterday) if today is June 18)
+function getRelativeDateLabel(dateStr) {
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return '';
+        
+        // Use the metadata current local time (June 19, 2026) as base
+        // But for browser environment, new Date() will match current local system time
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const target = new Date(date);
+        target.setHours(0, 0, 0, 0);
+        
+        const diffTime = today.getTime() - target.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) return ' (Today)';
+        if (diffDays === 1) return ' (Yesterday)';
+        if (diffDays > 1 && diffDays < 7) return ` (${diffDays} days ago)`;
+        return '';
+    } catch (e) {
+        return '';
+    }
+}
+
+// Safely highlight matching search terms inside HTML content text nodes
+function highlightHTML(htmlContent, query) {
+    if (!query) return htmlContent;
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlContent, 'text/html');
+        
+        const walk = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        const nodesToReplace = [];
+        
+        while (node = walk.nextNode()) {
+            if (node.nodeValue.toLowerCase().includes(query)) {
+                nodesToReplace.push(node);
+            }
+        }
+        
+        nodesToReplace.forEach(textNode => {
+            const parent = textNode.parentNode;
+            if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE')) return;
+            
+            const text = textNode.nodeValue;
+            const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escapedQuery})`, 'gi');
+            const parts = text.split(regex);
+            
+            const fragment = document.createDocumentFragment();
+            parts.forEach(part => {
+                if (part.toLowerCase() === query) {
+                    const mark = document.createElement('mark');
+                    mark.className = 'search-highlight';
+                    mark.textContent = part;
+                    fragment.appendChild(mark);
+                } else if (part) {
+                    fragment.appendChild(document.createTextNode(part));
+                }
+            });
+            if (parent) {
+                parent.replaceChild(fragment, textNode);
+            }
+        });
+        
+        return doc.body.innerHTML;
+    } catch (e) {
+        console.error('Highlighting failed: ', e);
+        return htmlContent;
+    }
 }

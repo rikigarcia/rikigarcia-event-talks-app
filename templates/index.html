@@ -124,6 +124,18 @@
 
             <!-- Content Container -->
             <section class="feed-section" aria-live="polite">
+                <!-- Offline Warning Banner -->
+                <div id="offline-banner" class="offline-banner hidden">
+                    <span class="banner-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </span>
+                    <span id="offline-banner-text">Offline Mode: Showing cached release notes.</span>
+                </div>
+
                 <!-- Skeleton Loader (displayed during fetches) -->
                 <div id="skeleton-loader" class="skeleton-container hidden">
                     <div class="skeleton-card">
@@ -250,6 +262,14 @@
     <div id="toast" class="toast hidden" role="alert" aria-live="assertive">
         <span id="toast-message">Copied to clipboard!</span>
     </div>
+
+    <!-- Back to Top Floating Button -->
+    <button id="back-to-top" class="btn-back-to-top hidden" title="Back to Top" aria-label="Scroll back to top">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+    </button>
 
     <!-- JS Scripts -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
