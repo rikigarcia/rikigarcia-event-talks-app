@@ -668,6 +668,7 @@ html[data-theme="dark"] .group-header {
 .update-actions {
     display: flex;
     justify-content: flex-end;
+    gap: 0.5rem;
     margin-top: 0.5rem;
 }
 

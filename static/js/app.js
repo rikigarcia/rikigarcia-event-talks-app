@@ -6,6 +6,7 @@ let searchTimeout = null;
 // DOM Elements
 const elements = {
     refreshBtn: document.getElementById('refresh-btn'),
+    exportBtn: document.getElementById('export-btn'),
     themeToggle: document.getElementById('theme-toggle'),
     searchInput: document.getElementById('search-input'),
     categoryFilters: document.getElementById('category-filters'),
@@ -68,6 +69,9 @@ function setupEventListeners() {
     elements.refreshBtn.addEventListener('click', () => {
         fetchReleases(true);
     });
+
+    // Export current filtered view to CSV
+    elements.exportBtn.addEventListener('click', exportToCSV);
 
     // Search input (debounced to avoid re-rendering on every keypress)
     elements.searchInput.addEventListener('input', () => {
@@ -245,6 +249,15 @@ function renderFeed() {
                         ${update.html}
                     </div>
                     <div class="update-actions">
+                        <button class="btn btn-copy-action" title="Copy release note text to clipboard">
+                            <span class="btn-icon-label">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </span>
+                            Copy Text
+                        </button>
                         <button class="btn btn-twitter btn-tweet-action" data-date="${release.date}" data-type="${update.type}" data-category="${update.category}" data-link="${release.link}">
                             <span class="btn-icon-label">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
@@ -271,6 +284,21 @@ function renderFeed() {
         elements.feedContainer.classList.remove('hidden');
         elements.noResults.classList.add('hidden');
     }
+
+    // Attach Event Listeners to dynamic Copy Buttons
+    document.querySelectorAll('.btn-copy-action').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const updateItem = e.currentTarget.closest('.update-item');
+            const bodyText = updateItem.querySelector('.update-body').innerText.trim();
+            try {
+                await navigator.clipboard.writeText(bodyText);
+                showToast('Update text copied to clipboard!');
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                showToast('Error: Failed to copy text.');
+            }
+        });
+    });
 
     // Attach Event Listeners to dynamic Tweet Buttons
     document.querySelectorAll('.btn-tweet-action').forEach(btn => {
@@ -410,4 +438,83 @@ function showToast(message) {
             elements.toast.classList.add('hidden');
         }, 300);
     }, 3000);
+}
+
+// Export Filtered View to CSV
+function exportToCSV() {
+    const searchQuery = elements.searchInput.value.trim().toLowerCase();
+    const csvRows = [];
+    
+    // CSV Header (escaping columns)
+    csvRows.push(['Date', 'Type', 'Category', 'Description', 'Link'].map(escapeCSVField).join(','));
+    
+    let exportCount = 0;
+    
+    releasesStore.forEach(release => {
+        release.updates.forEach(update => {
+            // Apply current filters
+            if (activeCategory !== 'all' && update.category !== activeCategory) {
+                return;
+            }
+            if (searchQuery) {
+                const textMatch = update.text.toLowerCase().includes(searchQuery);
+                const typeMatch = update.type.toLowerCase().includes(searchQuery);
+                const dateMatch = release.date.toLowerCase().includes(searchQuery);
+                if (!textMatch && !typeMatch && !dateMatch) {
+                    return;
+                }
+            }
+            
+            // Clean up vertical spaces and formatting in description text
+            const cleanedText = update.text.replace(/\r?\n/g, ' ').trim();
+            
+            const row = [
+                release.date,
+                update.type,
+                update.category,
+                cleanedText,
+                release.link
+            ];
+            
+            csvRows.push(row.map(escapeCSVField).join(','));
+            exportCount++;
+        });
+    });
+    
+    if (exportCount === 0) {
+        showToast('No updates to export in the current view.');
+        return;
+    }
+    
+    // Create download link and trigger file download
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.setAttribute('download', `bigquery_releases_${dateStr}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(`Successfully exported ${exportCount} updates to CSV!`);
+}
+
+// Helper to escape CSV strings
+function escapeCSVField(val) {
+    if (val === null || val === undefined) {
+        return '""';
+    }
+    let strVal = String(val);
+    // Escape double quotes inside by doubling them
+    if (strVal.includes(',') || strVal.includes('"') || strVal.includes('\n') || strVal.includes('\r')) {
+        strVal = '"' + strVal.replace(/"/g, '""') + '"';
+    } else {
+        strVal = '"' + strVal + '"';
+    }
+    return strVal;
 }
