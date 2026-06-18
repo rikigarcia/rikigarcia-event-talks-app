@@ -168,5 +168,5 @@ def get_releases():
         }), 500
 
 if __name__ == '__main__':
-    # Run the server locally on port 5001
-    app.run(debug=True, port=5001)
+    # Run the server locally on port 5002
+    app.run(debug=True, port=5002)
