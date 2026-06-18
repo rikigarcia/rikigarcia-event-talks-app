@@ -7,7 +7,7 @@ let searchTimeout = null;
 const elements = {
     refreshBtn: document.getElementById('refresh-btn'),
     exportBtn: document.getElementById('export-btn'),
-    themeToggle: document.getElementById('theme-toggle'),
+    themeCheckbox: document.getElementById('theme-checkbox'),
     searchInput: document.getElementById('search-input'),
     categoryFilters: document.getElementById('category-filters'),
     skeletonLoader: document.getElementById('skeleton-loader'),
@@ -43,11 +43,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Theme Logic
 function initTheme() {
-    elements.themeToggle.addEventListener('click', () => {
-        const currentTheme = document.documentElement.getAttribute('data-theme') || 
-                             (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    // Determine active theme (localStorage override or fall back to system)
+    const currentTheme = localStorage.getItem('color-scheme') || 
+                         (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    
+    // Set initial toggle switch state (checked = light, unchecked = dark)
+    elements.themeCheckbox.checked = (currentTheme === 'light');
+    
+    // Listen to changes on the sliding switch
+    elements.themeCheckbox.addEventListener('change', () => {
+        const newTheme = elements.themeCheckbox.checked ? 'light' : 'dark';
         
         document.documentElement.setAttribute('data-theme', newTheme);
         localStorage.setItem('color-scheme', newTheme);
@@ -59,6 +64,7 @@ function initTheme() {
         if (!localStorage.getItem('color-scheme')) {
             const systemTheme = e.matches ? 'dark' : 'light';
             document.querySelector('meta[name="color-scheme"]').content = systemTheme;
+            elements.themeCheckbox.checked = (systemTheme === 'light');
         }
     });
 }
